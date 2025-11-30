@@ -14,6 +14,8 @@ export default function RallyViewer() {
     const [activeRallyIndex, setActiveRallyIndex] = useState<number | null>(null);
     const [seekTime, setSeekTime] = useState<number | null>(null);
 
+    const [autoPauseTime, setAutoPauseTime] = useState<number | null>(null);
+
     const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
     const handleFetch = async () => {
@@ -23,6 +25,7 @@ export default function RallyViewer() {
         setError(null);
         setData(null);
         setActiveRallyIndex(null);
+        setAutoPauseTime(null);
 
         try {
             const result = await fetchAnalysis(videoId);
@@ -66,6 +69,7 @@ export default function RallyViewer() {
         if (!data?.rallies) return;
         const rally = data.rallies[index];
         setSeekTime(rally.startTime);
+        setAutoPauseTime(rally.endTime);
         setActiveRallyIndex(index);
     };
 
@@ -153,7 +157,9 @@ export default function RallyViewer() {
                                 <VideoPlayer
                                     url={data.videoUrl}
                                     seekTime={seekTime}
+                                    autoPauseTime={autoPauseTime}
                                     onTimeUpdate={handleTimeUpdate}
+                                    onPauseRequest={() => setAutoPauseTime(null)}
                                 />
                             </div>
                             <div className="lg:col-span-1">

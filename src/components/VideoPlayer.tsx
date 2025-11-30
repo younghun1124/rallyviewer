@@ -5,10 +5,12 @@ import { useEffect, useRef } from 'react';
 interface VideoPlayerProps {
     url: string;
     seekTime?: number | null;
+    autoPauseTime?: number | null;
     onTimeUpdate?: (currentTime: number) => void;
+    onPauseRequest?: () => void;
 }
 
-export default function VideoPlayer({ url, seekTime, onTimeUpdate }: VideoPlayerProps) {
+export default function VideoPlayer({ url, seekTime, autoPauseTime, onTimeUpdate, onPauseRequest }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
@@ -21,8 +23,17 @@ export default function VideoPlayer({ url, seekTime, onTimeUpdate }: VideoPlayer
     }, [seekTime]);
 
     const handleTimeUpdate = () => {
-        if (videoRef.current && onTimeUpdate) {
-            onTimeUpdate(videoRef.current.currentTime);
+        if (videoRef.current) {
+            const currentTime = videoRef.current.currentTime;
+
+            if (autoPauseTime && currentTime >= autoPauseTime) {
+                videoRef.current.pause();
+                if (onPauseRequest) onPauseRequest();
+            }
+
+            if (onTimeUpdate) {
+                onTimeUpdate(currentTime);
+            }
         }
     };
 
