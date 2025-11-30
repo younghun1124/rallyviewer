@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { fetchAnalysis, AnalysisResponse, Rally } from '@/lib/api';
 import VideoPlayer from './VideoPlayer';
 import RallyList from './RallyList';
 import { Search, Loader2, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 
 export default function RallyViewer() {
-    const [videoId, setVideoId] = useState('');
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const pathname = usePathname();
+
+    const [videoId, setVideoId] = useState(searchParams.get('id') || '');
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<AnalysisResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -18,8 +23,9 @@ export default function RallyViewer() {
 
     const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
-    const handleFetch = async () => {
-        if (!videoId.trim()) return;
+    // Extract fetch logic to a reusable function
+    const performFetch = useCallback(async (id: string) => {
+        if (!id.trim()) return;
 
         setLoading(true);
         setError(null);
@@ -28,17 +34,37 @@ export default function RallyViewer() {
         setAutoPauseTime(null);
 
         try {
-            const result = await fetchAnalysis(videoId);
+            const result = await fetchAnalysis(id);
             setData(result);
 
             if (result.status === 'processing' || result.status === 'pending') {
-                startPolling(videoId);
+                startPolling(id);
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An unknown error occurred');
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    // Handle initial load and URL changes
+    useEffect(() => {
+        const idFromUrl = searchParams.get('id');
+        if (idFromUrl && idFromUrl !== data?.videoId) {
+            setVideoId(idFromUrl);
+            performFetch(idFromUrl);
+        }
+    }, [searchParams, performFetch]); // Removed data?.videoId dependency to avoid loops, logic handled inside
+
+    const handleManualFetch = () => {
+        if (!videoId.trim()) return;
+
+        // Update URL
+        const params = new URLSearchParams(searchParams);
+        params.set('id', videoId);
+        router.replace(`${pathname}?${params.toString()}`);
+
+        performFetch(videoId);
     };
 
     const startPolling = (id: string) => {
@@ -105,14 +131,14 @@ export default function RallyViewer() {
                         type="text"
                         value={videoId}
                         onChange={(e) => setVideoId(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleFetch()}
+                        onKeyDown={(e) => e.key === 'Enter' && handleManualFetch()}
                         placeholder="Enter Video ID (e.g., abc123-def456)"
                         className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-lime-500/50 focus:border-lime-500 transition-all"
                     />
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
                 </div>
                 <button
-                    onClick={handleFetch}
+                    onClick={handleManualFetch}
                     disabled={loading || !videoId}
                     className="px-6 py-3 bg-lime-400 hover:bg-lime-300 disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-bold rounded-xl transition-colors flex items-center gap-2"
                 >
