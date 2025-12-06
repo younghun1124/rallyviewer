@@ -40,7 +40,7 @@ export default function RallyList({ rallies, activeRallyIndex, onRallyClick }: R
                 >
                     <div>
                         <div className={`text-lg font-bold mb-1 ${activeRallyIndex === idx ? 'text-lime-400' : 'text-white'}`}>
-                            Rally #{rally.rallyIndex + 1}
+                            Rally #{rally.rallyIndex}
                         </div>
                         <div className="text-sm text-zinc-400 font-mono">
                             {formatTime(rally.startTime)} - {formatTime(rally.endTime)}
