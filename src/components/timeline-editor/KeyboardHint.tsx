@@ -39,23 +39,23 @@ export default function KeyboardHint({ selectedRally, selectedIndex }: KeyboardH
 
       <div className="flex gap-4 text-zinc-400">
         <span>
+          <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">Q</kbd>
+          <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs ml-0.5">E</kbd>
+          <span className="ml-1 text-zinc-500">현재위치→시작/끝</span>
+        </span>
+        <span>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">A</kbd>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs ml-0.5">D</kbd>
-          <span className="ml-1 text-zinc-500">시작점</span>
+          <span className="ml-1 text-zinc-500">시작점 ±0.5s</span>
         </span>
         <span>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">←</kbd>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs ml-0.5">→</kbd>
-          <span className="ml-1 text-zinc-500">끝점</span>
+          <span className="ml-1 text-zinc-500">끝점 ±0.5s</span>
         </span>
         <span>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">Shift</kbd>
-          <span className="ml-1 text-zinc-500">10배</span>
-        </span>
-        <span>
-          <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">+</kbd>
-          <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs ml-0.5">-</kbd>
-          <span className="ml-1 text-zinc-500">줌</span>
+          <span className="ml-1 text-zinc-500">+A/D/←/→ 정밀 ±0.1s</span>
         </span>
       </div>
     </div>

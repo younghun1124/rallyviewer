@@ -7,6 +7,7 @@ interface UseKeyboardEditOptions {
   selectedIndex: number | null;
   rallies: Rally[];
   videoDuration: number;
+  currentTime: number;
   onUpdate: (index: number, updates: Partial<Pick<Rally, 'startTime' | 'endTime'>>) => void;
   onSeek: (time: number) => void;
   onDelete: (index: number) => void;
@@ -25,18 +26,20 @@ const REPEAT_DELAY = 300;    // 첫 반복까지 대기 시간
 const REPEAT_INTERVAL = 50;  // 반복 간격 (초당 20회)
 
 // keyCode로 한/영 상관없이 물리적 키 위치 감지
-// A키: 65, D키: 68, Q키: 81, E키: 69
+// A키: 65, D키: 68 (시작점 조정)
+// Q키: 81, E키: 69 (현재 위치로 시작점/끝점 설정)
 const KEY_CODE_MAP: Record<number, string> = {
-  65: 'a',   // A키 (ㅁ)
-  68: 'd',   // D키 (ㅇ)
-  81: 'q',   // Q키 (ㅂ)
-  69: 'e',   // E키 (ㄷ)
+  65: 'a',   // A키 (ㅁ) - 시작점 감소
+  68: 'd',   // D키 (ㅇ) - 시작점 증가
+  81: 'q',   // Q키 (ㅂ) - 현재 위치를 시작점으로
+  69: 'e',   // E키 (ㄷ) - 현재 위치를 끝점으로
 };
 
 export function useKeyboardEdit({
   selectedIndex,
   rallies,
   videoDuration,
+  currentTime,
   onUpdate,
   onSeek,
   onDelete,
@@ -47,7 +50,7 @@ export function useKeyboardEdit({
   onZoomIn,
   onZoomOut,
   step = 0.1,
-  fastMultiplier = 10,
+  fastMultiplier = 5,
   enabled = true,
 }: UseKeyboardEditOptions) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -71,7 +74,8 @@ export function useKeyboardEdit({
       if (selectedIndex === null || !rallies[selectedIndex]) return;
 
       const rally = rallies[selectedIndex];
-      const currentStep = isShift ? step * fastMultiplier : step;
+      // 기본이 빠름, Shift 누르면 느림 (정밀 조정)
+      const currentStep = isShift ? step : step * fastMultiplier;
 
       switch (action) {
         case 'start-decrease': {
@@ -125,12 +129,12 @@ export function useKeyboardEdit({
       const physicalKey = KEY_CODE_MAP[e.keyCode];
       const key = e.key.toLowerCase();
 
-      // 반복 가능한 액션 매핑
+      // 반복 가능한 액션 매핑 (A/D, 화살표)
       let action: string | null = null;
 
-      if (physicalKey === 'a' || physicalKey === 'q') {
+      if (physicalKey === 'a') {
         action = 'start-decrease';
-      } else if (physicalKey === 'd' || physicalKey === 'e') {
+      } else if (physicalKey === 'd') {
         action = 'start-increase';
       } else if (key === 'arrowleft') {
         action = 'end-decrease';
@@ -160,10 +164,39 @@ export function useKeyboardEdit({
         return;
       }
 
+      // Q/E: 현재 위치를 시작점/끝점으로 설정 (단발성)
+      if (physicalKey === 'q') {
+        e.preventDefault();
+        if (selectedIndex !== null && rallies[selectedIndex]) {
+          const rally = rallies[selectedIndex];
+          // 현재 위치가 끝점보다 앞이어야 함
+          if (currentTime < rally.endTime - 0.1) {
+            onUpdate(selectedIndex, { startTime: currentTime });
+          }
+        }
+        return;
+      }
+      if (physicalKey === 'e') {
+        e.preventDefault();
+        if (selectedIndex !== null && rallies[selectedIndex]) {
+          const rally = rallies[selectedIndex];
+          // 현재 위치가 시작점보다 뒤이어야 함
+          if (currentTime > rally.startTime + 0.1) {
+            onUpdate(selectedIndex, { endTime: currentTime });
+          }
+        }
+        return;
+      }
+
       // 단발성 키
       switch (key) {
         case ' ':
           e.preventDefault();
+          e.stopPropagation();
+          // video 요소에서 포커스 제거 (video controls 간섭 방지)
+          if (document.activeElement instanceof HTMLVideoElement) {
+            document.activeElement.blur();
+          }
           onTogglePlay();
           break;
         case 'delete':
@@ -205,9 +238,9 @@ export function useKeyboardEdit({
 
       let action: string | null = null;
 
-      if (physicalKey === 'a' || physicalKey === 'q') {
+      if (physicalKey === 'a') {
         action = 'start-decrease';
-      } else if (physicalKey === 'd' || physicalKey === 'e') {
+      } else if (physicalKey === 'd') {
         action = 'start-increase';
       } else if (key === 'arrowleft') {
         action = 'end-decrease';

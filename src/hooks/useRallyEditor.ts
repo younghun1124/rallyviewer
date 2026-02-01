@@ -21,6 +21,9 @@ export interface UseRallyEditorReturn {
   addRally: (startTime: number, endTime: number) => void;
   deleteRally: (index: number) => void;
   updateRally: (index: number, updates: Partial<Pick<Rally, 'startTime' | 'endTime'>>) => void;
+  // 연속 편집용: 시작 시 한 번만 undo 스택에 저장
+  beginEdit: () => void;
+  updateRallyLive: (index: number, updates: Partial<Pick<Rally, 'startTime' | 'endTime'>>) => void;
   setRallies: (rallies: Rally[]) => void;
 
   undo: () => void;
@@ -95,6 +98,35 @@ export function useRallyEditor(initialRallies: Rally[]): UseRallyEditorReturn {
     [pushToUndoStack]
   );
 
+  // 연속 편집 시작 - undo 스택에 현재 상태 저장
+  const beginEdit = useCallback(() => {
+    pushToUndoStack();
+  }, [pushToUndoStack]);
+
+  // 연속 편집 중 업데이트 - undo 스택에 저장하지 않음
+  const updateRallyLive = useCallback(
+    (index: number, updates: Partial<Pick<Rally, 'startTime' | 'endTime'>>) => {
+      setRallies((prev) => {
+        const updated = prev.map((rally, i) => {
+          if (i !== index) return rally;
+
+          const newRally = {
+            ...rally,
+            startTime: updates.startTime !== undefined
+              ? roundToDecimal(updates.startTime)
+              : rally.startTime,
+            endTime: updates.endTime !== undefined
+              ? roundToDecimal(updates.endTime)
+              : rally.endTime,
+          };
+          return recalculateDuration(newRally);
+        });
+        return reindexRallies(sortRallies(updated));
+      });
+    },
+    []
+  );
+
   const undo = useCallback(() => {
     if (undoStack.length === 0) return;
 
@@ -140,6 +172,8 @@ export function useRallyEditor(initialRallies: Rally[]): UseRallyEditorReturn {
     addRally,
     deleteRally,
     updateRally,
+    beginEdit,
+    updateRallyLive,
     setRallies: setRalliesExternal,
     undo,
     canUndo,

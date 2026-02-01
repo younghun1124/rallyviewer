@@ -47,10 +47,8 @@ export function useAutoSave({
 
     try {
       const saved = localStorage.getItem(storageKey);
-      console.log('[AutoSave] Loading from localStorage:', storageKey, saved ? 'found' : 'not found');
       if (saved) {
         const data: SavedData = JSON.parse(saved);
-        console.log('[AutoSave] Loaded rallies:', data.rallies.length, 'items');
         setInitialSavedRallies(data.rallies);
         setLastSavedAt(new Date(data.savedAt));
       }
@@ -85,7 +83,6 @@ export function useAutoSave({
           savedAt: Date.now(),
         };
         localStorage.setItem(storageKey, JSON.stringify(data));
-        console.log('[AutoSave] Saved to localStorage:', storageKey, rallies.length, 'items');
         setLastSavedAt(new Date(data.savedAt));
       } catch (err) {
         console.error('Failed to save data:', err);

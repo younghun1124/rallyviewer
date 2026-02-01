@@ -150,6 +150,11 @@ export default function RallyViewer() {
         setHasEdited(true);
     }, []);
 
+    // 편집 모드에서 현재 시간이 랠리 구간 안에 있는지 확인
+    const isInRally = isEditMode && editedRallies.some(
+        (r) => currentVideoTime >= r.startTime && currentVideoTime <= r.endTime
+    );
+
     return (
         <div className="max-w-7xl mx-auto p-6 space-y-8">
             <div className="flex flex-col items-center space-y-4 text-center">
@@ -253,6 +258,8 @@ export default function RallyViewer() {
                                         onDurationChange={handleDurationChange}
                                         onPauseRequest={() => setAutoPauseTime(null)}
                                         showSpeedControl={true}
+                                        preloadFull={true}
+                                        isInRally={isInRally}
                                     />
                                     {videoDuration > 0 && (
                                         <TimelineEditor

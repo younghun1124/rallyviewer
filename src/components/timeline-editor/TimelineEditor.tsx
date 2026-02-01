@@ -10,7 +10,7 @@ import TimeRuler from './TimeRuler';
 import TimelineTrack from './TimelineTrack';
 import KeyboardHint from './KeyboardHint';
 import TimelineControls from './TimelineControls';
-import { Plus, Undo2, RotateCcw, Save, Cloud, Copy, Check } from 'lucide-react';
+import { Plus, Save, Cloud, Copy, Check } from 'lucide-react';
 
 interface TimelineEditorProps {
   videoId: string;
@@ -22,7 +22,7 @@ interface TimelineEditorProps {
 }
 
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 20;
+const MAX_ZOOM = 40;
 
 export default function TimelineEditor({
   videoId,
@@ -43,13 +43,9 @@ export default function TimelineEditor({
 
   const {
     rallies,
-    hasChanges,
     addRally,
     deleteRally,
-    updateRally,
-    undo,
-    canUndo,
-    revertAll,
+    updateRallyLive,
     setRallies,
   } = useRallyEditor(initialRallies);
 
@@ -69,8 +65,6 @@ export default function TimelineEditor({
     if (hasSavedData && savedRallies && !restoreChecked.current) {
       // 저장된 데이터가 현재 데이터와 다른지 확인
       const isDifferent = JSON.stringify(savedRallies) !== JSON.stringify(initialRallies);
-      console.log('[Restore] hasSavedData:', hasSavedData, 'isDifferent:', isDifferent);
-      console.log('[Restore] savedRallies:', savedRallies?.length, 'initialRallies:', initialRallies.length);
       if (isDifferent) {
         setShowRestorePrompt(true);
       }
@@ -169,6 +163,10 @@ export default function TimelineEditor({
   }, [handleZoomIn, handleZoomOut]);
 
   const handleSeek = useCallback((time: number) => {
+    // 재생 중이면 일시정지 후 seek
+    if (videoPlayerRef.current && !videoPlayerRef.current.isPaused()) {
+      videoPlayerRef.current.pause();
+    }
     videoPlayerRef.current?.seekToWithPreview(time);
   }, [videoPlayerRef]);
 
@@ -226,7 +224,8 @@ export default function TimelineEditor({
     selectedIndex,
     rallies,
     videoDuration,
-    onUpdate: updateRally,
+    currentTime,
+    onUpdate: updateRallyLive,
     onSeek: handleSeek,
     onDelete: handleDelete,
     onSelectPrev: handleSelectPrev,
@@ -239,17 +238,6 @@ export default function TimelineEditor({
   });
 
   const selectedRally = selectedIndex !== null ? rallies[selectedIndex] : null;
-
-  // 변경 개수 계산
-  const changeCount = rallies.reduce((count, rally) => {
-    const original = initialRallies.find((r) => r.rallyIndex === rally.rallyIndex);
-    if (!original || original.startTime !== rally.startTime || original.endTime !== rally.endTime) {
-      return count + 1;
-    }
-    return count;
-  }, 0) + initialRallies.filter(
-    (original) => !rallies.some((r) => r.rallyIndex === original.rallyIndex)
-  ).length;
 
   return (
     <div
@@ -310,35 +298,8 @@ export default function TimelineEditor({
             maxZoom={MAX_ZOOM}
           />
 
-          <div className="w-px h-6 bg-zinc-700" />
-
-          <button
-            onClick={undo}
-            disabled={!canUndo}
-            className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-zinc-300"
-          >
-            <Undo2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => {
-              if (confirm('모든 변경 사항을 되돌리시겠습니까?')) {
-                revertAll();
-              }
-            }}
-            disabled={!hasChanges}
-            className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-zinc-300"
-            title="전체 되돌리기"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
-          {changeCount > 0 && (
-            <span className="text-sm text-lime-400">
-              변경: {changeCount}건
-            </span>
-          )}
-
           {/* 자동 저장 상태 */}
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+          <div className="flex items-center gap-1.5 text-xs text-zinc-500 w-24">
             {isSaving ? (
               <>
                 <Save className="w-3 h-3 animate-pulse" />
@@ -399,7 +360,7 @@ export default function TimelineEditor({
             currentTime={currentTime}
             selectedIndex={selectedIndex}
             onSelect={setSelectedIndex}
-            onUpdate={updateRally}
+            onUpdate={updateRallyLive}
             onSeek={handleSeek}
           />
         </div>
