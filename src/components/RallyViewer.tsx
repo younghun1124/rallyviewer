@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { fetchAnalysis, AnalysisResponse, Rally } from '@/lib/api';
-import VideoPlayer from './VideoPlayer';
+import VideoPlayer, { VideoPlayerRef } from './VideoPlayer';
 import RallyList from './RallyList';
-import { Search, Loader2, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import TimelineEditor from './timeline-editor/TimelineEditor';
+import { Search, Loader2, AlertCircle, CheckCircle2, Clock, Pencil, Eye } from 'lucide-react';
 
 export default function RallyViewer() {
     const searchParams = useSearchParams();
@@ -18,12 +19,21 @@ export default function RallyViewer() {
     const [error, setError] = useState<string | null>(null);
     const [activeRallyIndex, setActiveRallyIndex] = useState<number | null>(null);
     const [seekTime, setSeekTime] = useState<number | null>(null);
-
     const [autoPauseTime, setAutoPauseTime] = useState<number | null>(null);
 
-    const pollInterval = useRef<NodeJS.Timeout | null>(null);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editedRallies, setEditedRallies] = useState<Rally[]>([]);
+    const [hasEdited, setHasEdited] = useState(false); // 편집한 적 있는지
+    const [showEditedVersion, setShowEditedVersion] = useState(true); // 보기 모드에서 편집본 표시 여부
+    const [currentVideoTime, setCurrentVideoTime] = useState(0);
+    const [videoDuration, setVideoDuration] = useState(0);
 
-    // Extract fetch logic to a reusable function
+    const pollInterval = useRef<NodeJS.Timeout | null>(null);
+    const videoPlayerRef = useRef<VideoPlayerRef>(null);
+
+    // 편집한 적 있고 편집본 보기 선택 시 editedRallies 사용, 아니면 원본 사용
+    const currentRallies = (hasEdited && showEditedVersion) ? editedRallies : (data?.rallies || []);
+
     const performFetch = useCallback(async (id: string) => {
         if (!id.trim()) return;
 
@@ -32,6 +42,10 @@ export default function RallyViewer() {
         setData(null);
         setActiveRallyIndex(null);
         setAutoPauseTime(null);
+        setIsEditMode(false);
+        setEditedRallies([]);
+        setHasEdited(false);
+        setVideoDuration(0);
 
         try {
             const result = await fetchAnalysis(id);
@@ -47,19 +61,17 @@ export default function RallyViewer() {
         }
     }, []);
 
-    // Handle initial load and URL changes
     useEffect(() => {
         const idFromUrl = searchParams.get('id');
         if (idFromUrl && idFromUrl !== data?.videoId) {
             setVideoId(idFromUrl);
             performFetch(idFromUrl);
         }
-    }, [searchParams, performFetch]); // Removed data?.videoId dependency to avoid loops, logic handled inside
+    }, [searchParams, performFetch]);
 
     const handleManualFetch = () => {
         if (!videoId.trim()) return;
 
-        // Update URL
         const params = new URLSearchParams(searchParams);
         params.set('id', videoId);
         router.replace(`${pathname}?${params.toString()}`);
@@ -79,10 +91,9 @@ export default function RallyViewer() {
                     if (pollInterval.current) clearInterval(pollInterval.current);
                 }
             } catch (err) {
-                // Keep polling on error? Maybe not.
                 console.error('Polling error:', err);
             }
-        }, 3000); // Poll every 3 seconds
+        }, 3000);
     };
 
     useEffect(() => {
@@ -91,31 +102,56 @@ export default function RallyViewer() {
         };
     }, []);
 
+    const handleEditModeToggle = () => {
+        if (!isEditMode) {
+            // 편집 모드 진입: 편집한 적 없으면 원본으로 초기화
+            if (!hasEdited && data?.rallies) {
+                setEditedRallies([...data.rallies]);
+            }
+        }
+        setIsEditMode(!isEditMode);
+    };
+
     const handleRallyClick = (index: number) => {
-        if (!data?.rallies) return;
-        const rally = data.rallies[index];
+        const rallies = currentRallies;
+        if (!rallies || !rallies[index]) return;
+        const rally = rallies[index];
         setSeekTime(rally.startTime);
         setAutoPauseTime(rally.endTime);
         setActiveRallyIndex(index);
     };
 
-    const handleTimeUpdate = (currentTime: number) => {
-        if (!data?.rallies) return;
+    const handleTimeUpdate = (time: number) => {
+        setCurrentVideoTime(time);
 
-        // Find current rally
-        const current = data.rallies.findIndex(
-            r => currentTime >= r.startTime && currentTime <= r.endTime
-        );
+        // 편집 모드가 아닐 때만 활성 랠리 자동 업데이트
+        if (!isEditMode) {
+            const rallies = currentRallies;
+            if (!rallies) return;
 
-        if (current !== -1 && current !== activeRallyIndex) {
-            setActiveRallyIndex(current);
-        } else if (current === -1 && activeRallyIndex !== null) {
-            setActiveRallyIndex(null);
+            const current = rallies.findIndex(
+                r => time >= r.startTime && time <= r.endTime
+            );
+
+            if (current !== -1 && current !== activeRallyIndex) {
+                setActiveRallyIndex(current);
+            } else if (current === -1 && activeRallyIndex !== null) {
+                setActiveRallyIndex(null);
+            }
         }
     };
 
+    const handleDurationChange = (duration: number) => {
+        setVideoDuration(duration);
+    };
+
+    const handleRalliesChange = useCallback((rallies: Rally[]) => {
+        setEditedRallies(rallies);
+        setHasEdited(true);
+    }, []);
+
     return (
-        <div className="max-w-6xl mx-auto p-6 space-y-8">
+        <div className="max-w-7xl mx-auto p-6 space-y-8">
             <div className="flex flex-col items-center space-y-4 text-center">
                 <h1 className="text-4xl font-extrabold tracking-tight text-white">
                     PerfectSwing <span className="text-lime-400">Rally Viewer</span>
@@ -172,35 +208,119 @@ export default function RallyViewer() {
                                 <span className="capitalize">{data.status}</span>
                             </div>
                         </div>
-                        <div className="text-sm text-zinc-500 font-mono">
-                            ID: {data.videoId}
+                        <div className="flex items-center gap-4">
+                            <div className="text-sm text-zinc-500 font-mono">
+                                ID: {data.videoId}
+                            </div>
+                            {data.status === 'completed' && (
+                                <button
+                                    onClick={handleEditModeToggle}
+                                    className={`
+                                        flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                                        ${isEditMode
+                                            ? 'bg-lime-500/20 text-lime-400 hover:bg-lime-500/30'
+                                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                                        }
+                                    `}
+                                >
+                                    {isEditMode ? (
+                                        <>
+                                            <Eye className="w-4 h-4" />
+                                            보기 모드
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Pencil className="w-4 h-4" />
+                                            편집 모드
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
 
                     {data.status === 'completed' && data.videoUrl && (
-                        <div className="grid lg:grid-cols-3 gap-6">
-                            <div className="lg:col-span-2 space-y-4">
-                                <VideoPlayer
-                                    url={data.videoUrl}
-                                    seekTime={seekTime}
-                                    autoPauseTime={autoPauseTime}
-                                    onTimeUpdate={handleTimeUpdate}
-                                    onPauseRequest={() => setAutoPauseTime(null)}
-                                />
-                            </div>
-                            <div className="lg:col-span-1">
-                                <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 h-full max-h-[600px] overflow-y-auto">
-                                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                        Rallies <span className="text-zinc-500 text-sm font-normal">({data.rallies?.length || 0})</span>
-                                    </h3>
-                                    <RallyList
-                                        rallies={data.rallies || []}
-                                        activeRallyIndex={activeRallyIndex}
-                                        onRallyClick={handleRallyClick}
+                        <>
+                            {/* 편집 모드: 세로 레이아웃 */}
+                            {isEditMode ? (
+                                <div className="space-y-4">
+                                    <VideoPlayer
+                                        ref={videoPlayerRef}
+                                        url={data.videoUrl}
+                                        seekTime={seekTime}
+                                        autoPauseTime={null}
+                                        onTimeUpdate={handleTimeUpdate}
+                                        onDurationChange={handleDurationChange}
+                                        onPauseRequest={() => setAutoPauseTime(null)}
+                                        showSpeedControl={true}
                                     />
+                                    {videoDuration > 0 && (
+                                        <TimelineEditor
+                                            videoId={data.videoId}
+                                            initialRallies={hasEdited ? editedRallies : (data.rallies || [])}
+                                            videoDuration={videoDuration}
+                                            currentTime={currentVideoTime}
+                                            videoPlayerRef={videoPlayerRef}
+                                            onRalliesChange={handleRalliesChange}
+                                        />
+                                    )}
                                 </div>
-                            </div>
-                        </div>
+                            ) : (
+                                /* 보기 모드: 비디오 왼쪽, 랠리 리스트 오른쪽 */
+                                <div className="flex gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <VideoPlayer
+                                            ref={videoPlayerRef}
+                                            url={data.videoUrl}
+                                            seekTime={seekTime}
+                                            autoPauseTime={autoPauseTime}
+                                            onTimeUpdate={handleTimeUpdate}
+                                            onDurationChange={handleDurationChange}
+                                            onPauseRequest={() => setAutoPauseTime(null)}
+                                            showSpeedControl={false}
+                                        />
+                                    </div>
+                                    <div className="w-80 flex-shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 flex flex-col max-h-[calc(100vh-200px)]">
+                                        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                                Rallies <span className="text-zinc-500 text-sm font-normal">({currentRallies.length})</span>
+                                            </h3>
+                                            {hasEdited && (
+                                                <div className="flex items-center gap-1 bg-zinc-800 rounded-lg p-1">
+                                                    <button
+                                                        onClick={() => setShowEditedVersion(false)}
+                                                        className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+                                                            !showEditedVersion
+                                                                ? 'bg-zinc-700 text-white'
+                                                                : 'text-zinc-400 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        원본
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setShowEditedVersion(true)}
+                                                        className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+                                                            showEditedVersion
+                                                                ? 'bg-lime-500 text-black'
+                                                                : 'text-zinc-400 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        편집본
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="overflow-y-auto flex-1">
+                                            <RallyList
+                                                rallies={currentRallies}
+                                                activeRallyIndex={activeRallyIndex}
+                                                onRallyClick={handleRallyClick}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
 
                     {data.status === 'failed' && (
