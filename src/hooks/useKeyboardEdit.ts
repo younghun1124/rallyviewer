@@ -28,11 +28,14 @@ const REPEAT_INTERVAL = 50;  // 반복 간격 (초당 20회)
 // keyCode로 한/영 상관없이 물리적 키 위치 감지
 // A키: 65, D키: 68 (시작점 조정)
 // Q키: 81, E키: 69 (현재 위치로 시작점/끝점 설정)
+// Z키: 90, C키: 67 (재생 위치 이동)
 const KEY_CODE_MAP: Record<number, string> = {
   65: 'a',   // A키 (ㅁ) - 시작점 감소
   68: 'd',   // D키 (ㅇ) - 시작점 증가
   81: 'q',   // Q키 (ㅂ) - 현재 위치를 시작점으로
   69: 'e',   // E키 (ㄷ) - 현재 위치를 끝점으로
+  90: 'z',   // Z키 (ㅋ) - 재생 위치 1초 뒤로
+  67: 'c',   // C키 (ㅊ) - 재생 위치 1초 앞으로
 };
 
 export function useKeyboardEdit({
@@ -185,6 +188,20 @@ export function useKeyboardEdit({
             onUpdate(selectedIndex, { endTime: currentTime });
           }
         }
+        return;
+      }
+
+      // Z/C: 재생 위치 1초 이동 (단발성)
+      if (physicalKey === 'z') {
+        e.preventDefault();
+        const newTime = Math.max(0, currentTime - 1);
+        onSeek(newTime);
+        return;
+      }
+      if (physicalKey === 'c') {
+        e.preventDefault();
+        const newTime = Math.min(videoDuration, currentTime + 1);
+        onSeek(newTime);
         return;
       }
 
