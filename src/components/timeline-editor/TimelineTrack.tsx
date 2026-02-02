@@ -5,7 +5,7 @@ import { findOverlaps } from '@/lib/rally-utils';
 import { pixelsToTime } from '@/lib/timeline-utils';
 import RallyBlock from './RallyBlock';
 import PlayheadIndicator from './PlayheadIndicator';
-import { useMemo } from 'react';
+import { useMemo, useRef, useCallback } from 'react';
 
 interface TimelineTrackProps {
   rallies: Rally[];
@@ -29,18 +29,45 @@ export default function TimelineTrack({
   onSeek,
 }: TimelineTrackProps) {
   const overlaps = useMemo(() => findOverlaps(rallies), [rallies]);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
 
-  const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const time = pixelsToTime(x, trackWidth, duration);
-    onSeek(Math.max(0, Math.min(duration, time)));
-  };
+  const getTimeFromEvent = useCallback((clientX: number) => {
+    if (!trackRef.current) return 0;
+    const rect = trackRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    return Math.max(0, Math.min(duration, pixelsToTime(x, trackWidth, duration)));
+  }, [trackWidth, duration]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // RallyBlock 클릭 시 무시 (이벤트 버블링)
+    if ((e.target as HTMLElement).closest('[data-rally-block]')) return;
+
+    isDraggingRef.current = true;
+    const time = getTimeFromEvent(e.clientX);
+    onSeek(time);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const time = getTimeFromEvent(moveEvent.clientX);
+      onSeek(time);
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, [getTimeFromEvent, onSeek]);
 
   return (
     <div
+      ref={trackRef}
       className="relative h-12 bg-zinc-900 rounded-lg cursor-pointer"
-      onClick={handleTrackClick}
+      onMouseDown={handleMouseDown}
     >
       {/* 랠리 블록들 */}
       {rallies.map((rally, index) => (
