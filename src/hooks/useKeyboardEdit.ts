@@ -191,16 +191,18 @@ export function useKeyboardEdit({
         return;
       }
 
-      // Z/C: 재생 위치 1초 이동 (단발성)
+      // Z/C: 재생 위치 이동 (기본 1초, Shift 0.2초)
       if (physicalKey === 'z') {
         e.preventDefault();
-        const newTime = Math.max(0, currentTime - 1);
+        const seekStep = e.shiftKey ? 0.2 : 1;
+        const newTime = Math.max(0, currentTime - seekStep);
         onSeek(newTime);
         return;
       }
       if (physicalKey === 'c') {
         e.preventDefault();
-        const newTime = Math.min(videoDuration, currentTime + 1);
+        const seekStep = e.shiftKey ? 0.2 : 1;
+        const newTime = Math.min(videoDuration, currentTime + seekStep);
         onSeek(newTime);
         return;
       }
