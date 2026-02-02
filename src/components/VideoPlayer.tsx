@@ -12,6 +12,7 @@ interface VideoPlayerProps {
     showSpeedControl?: boolean;
     preloadFull?: boolean; // 편집 모드에서 전체 버퍼링
     isInRally?: boolean; // 현재 랠리 구간 안에 있는지
+    showRotateControl?: boolean; // 회전 버튼 표시
 }
 
 export interface VideoPlayerRef {
@@ -28,13 +29,14 @@ export interface VideoPlayerRef {
 const SPEED_OPTIONS = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoPlayer(
-    { url, seekTime, autoPauseTime, onTimeUpdate, onDurationChange, onPauseRequest, showSpeedControl = false, preloadFull = false, isInRally = false },
+    { url, seekTime, autoPauseTime, onTimeUpdate, onDurationChange, onPauseRequest, showSpeedControl = false, preloadFull = false, isInRally = false, showRotateControl = false },
     ref
 ) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [playbackRate, setPlaybackRate] = useState(1);
     const [bufferedPercent, setBufferedPercent] = useState(0);
     const [isBuffering, setIsBuffering] = useState(false);
+    const [rotation, setRotation] = useState(0);
 
     useImperativeHandle(ref, () => ({
         getCurrentTime: () => videoRef.current?.currentTime ?? 0,
@@ -117,12 +119,17 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
         }
     };
 
+    const handleRotate = () => {
+        setRotation((prev) => (prev + 90) % 360);
+    };
+
     return (
         <div className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg ring-4 transition-[box-shadow] duration-150 ${isInRally ? 'ring-lime-500' : 'ring-transparent'}`}>
             <video
                 ref={videoRef}
                 src={url}
-                className="w-full h-full object-contain"
+                className="w-full h-full object-contain transition-transform duration-200"
+                style={{ transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined }}
                 controls
                 preload={preloadFull ? 'auto' : 'metadata'}
                 onTimeUpdate={handleTimeUpdate}
@@ -147,22 +154,43 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
                     />
                 </div>
             )}
-            {showSpeedControl && (
-                <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/70 rounded-lg px-2 py-1">
-                    <span className="text-xs text-zinc-400 mr-1">속도</span>
-                    {SPEED_OPTIONS.map((speed) => (
+            {(showSpeedControl || showRotateControl) && (
+                <div className="absolute top-3 right-3 flex items-center gap-2">
+                    {showRotateControl && (
                         <button
-                            key={speed}
-                            onClick={() => handleSpeedChange(speed)}
-                            className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                                playbackRate === speed
+                            onClick={handleRotate}
+                            className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors ${
+                                rotation !== 0
                                     ? 'bg-lime-500 text-black font-medium'
-                                    : 'text-zinc-300 hover:bg-zinc-700'
+                                    : 'bg-black/70 text-zinc-300 hover:bg-zinc-700'
                             }`}
+                            title="영상 90° 회전"
                         >
-                            {speed}x
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                                <path d="M21 3v5h-5" />
+                            </svg>
+                            {rotation}°
                         </button>
-                    ))}
+                    )}
+                    {showSpeedControl && (
+                        <div className="flex items-center gap-1 bg-black/70 rounded-lg px-2 py-1">
+                            <span className="text-xs text-zinc-400 mr-1">속도</span>
+                            {SPEED_OPTIONS.map((speed) => (
+                                <button
+                                    key={speed}
+                                    onClick={() => handleSpeedChange(speed)}
+                                    className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                                        playbackRate === speed
+                                            ? 'bg-lime-500 text-black font-medium'
+                                            : 'text-zinc-300 hover:bg-zinc-700'
+                                    }`}
+                                >
+                                    {speed}x
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

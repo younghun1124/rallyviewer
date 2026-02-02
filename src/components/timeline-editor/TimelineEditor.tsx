@@ -10,7 +10,7 @@ import TimeRuler from './TimeRuler';
 import TimelineTrack from './TimelineTrack';
 import KeyboardHint from './KeyboardHint';
 import TimelineControls from './TimelineControls';
-import { Plus, Save, Cloud, Copy, Check } from 'lucide-react';
+import { Plus, Save, Cloud, Copy, Check, Trash2 } from 'lucide-react';
 
 interface TimelineEditorProps {
   videoId: string;
@@ -285,6 +285,23 @@ export default function TimelineEditor({
                 <span>CSV 복사</span>
               </>
             )}
+          </button>
+
+          <div className="w-px h-6 bg-zinc-700" />
+
+          <button
+            onClick={() => {
+              if (rallies.length === 0) return;
+              if (confirm(`정말로 모든 랠리 ${rallies.length}개를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+                setRallies([]);
+                setSelectedIndex(null);
+              }
+            }}
+            disabled={rallies.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-300 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>전체 삭제</span>
           </button>
         </div>
 

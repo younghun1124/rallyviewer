@@ -260,6 +260,7 @@ export default function RallyViewer() {
                                         showSpeedControl={true}
                                         preloadFull={true}
                                         isInRally={isInRally}
+                                        showRotateControl={true}
                                     />
                                     {videoDuration > 0 && (
                                         <TimelineEditor
