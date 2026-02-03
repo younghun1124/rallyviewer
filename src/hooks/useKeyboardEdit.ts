@@ -75,43 +75,78 @@ export function useKeyboardEdit({
     activeKeyRef.current = null;
   }, []);
 
+  // currentTime을 ref로 추적 (클로저 문제 방지)
+  const currentTimeRef = useRef(currentTime);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
   const executeAction = useCallback(
     (action: string, isShift: boolean) => {
-      if (selectedIndex === null || !rallies[selectedIndex]) return;
+      // 랠리 편집 액션
+      if (action.startsWith('start-') || action.startsWith('end-')) {
+        if (selectedIndex === null || !rallies[selectedIndex]) return;
 
-      const rally = rallies[selectedIndex];
-      // 기본이 빠름, Shift 누르면 느림 (정밀 조정)
-      const currentStep = isShift ? step : step * fastMultiplier;
+        const rally = rallies[selectedIndex];
+        // 기본이 빠름, Shift 누르면 느림 (정밀 조정)
+        const currentStep = isShift ? step : step * fastMultiplier;
 
-      switch (action) {
-        case 'start-decrease': {
-          // 시작점 감소 (A키 또는 Q키)
-          const newStart = Math.max(0, rally.startTime - currentStep);
-          if (newStart < rally.endTime - 0.1) {
+        switch (action) {
+          case 'start-decrease': {
+            // 시작점 감소 (A키)
+            const newStart = Math.max(0, rally.startTime - currentStep);
+            if (newStart < rally.endTime - 0.1) {
+              onUpdate(selectedIndex, { startTime: newStart });
+              onSeek(newStart);
+            }
+            break;
+          }
+          case 'start-increase': {
+            // 시작점 증가 (D키)
+            const newStart = Math.min(rally.endTime - 0.1, rally.startTime + currentStep);
             onUpdate(selectedIndex, { startTime: newStart });
             onSeek(newStart);
+            break;
           }
+          case 'end-decrease': {
+            // 끝점 감소 (← 화살표)
+            const newEnd = Math.max(rally.startTime + 0.1, rally.endTime - currentStep);
+            onUpdate(selectedIndex, { endTime: newEnd });
+            onSeek(newEnd);
+            break;
+          }
+          case 'end-increase': {
+            // 끝점 증가 (→ 화살표)
+            const newEnd = Math.min(videoDuration, rally.endTime + currentStep);
+            onUpdate(selectedIndex, { endTime: newEnd });
+            onSeek(newEnd);
+            break;
+          }
+        }
+        return;
+      }
+
+      // 재생 위치 이동 액션 (Z/V/X/C)
+      const time = currentTimeRef.current;
+      switch (action) {
+        case 'seek-back-1s': {
+          const newTime = Math.max(0, time - 1);
+          onSeek(newTime);
           break;
         }
-        case 'start-increase': {
-          // 시작점 증가 (D키 또는 E키)
-          const newStart = Math.min(rally.endTime - 0.1, rally.startTime + currentStep);
-          onUpdate(selectedIndex, { startTime: newStart });
-          onSeek(newStart);
+        case 'seek-forward-1s': {
+          const newTime = Math.min(videoDuration, time + 1);
+          onSeek(newTime);
           break;
         }
-        case 'end-decrease': {
-          // 끝점 감소 (← 화살표)
-          const newEnd = Math.max(rally.startTime + 0.1, rally.endTime - currentStep);
-          onUpdate(selectedIndex, { endTime: newEnd });
-          onSeek(newEnd);
+        case 'seek-back-02s': {
+          const newTime = Math.max(0, time - 0.2);
+          onSeek(newTime);
           break;
         }
-        case 'end-increase': {
-          // 끝점 증가 (→ 화살표)
-          const newEnd = Math.min(videoDuration, rally.endTime + currentStep);
-          onUpdate(selectedIndex, { endTime: newEnd });
-          onSeek(newEnd);
+        case 'seek-forward-02s': {
+          const newTime = Math.min(videoDuration, time + 0.2);
+          onSeek(newTime);
           break;
         }
       }
@@ -138,6 +173,7 @@ export function useKeyboardEdit({
       // 반복 가능한 액션 매핑 (A/D, 화살표)
       let action: string | null = null;
 
+      // 반복 가능한 액션 매핑 (A/D, 화살표, Z/V/X/C)
       if (physicalKey === 'a') {
         action = 'start-decrease';
       } else if (physicalKey === 'd') {
@@ -146,6 +182,14 @@ export function useKeyboardEdit({
         action = 'end-decrease';
       } else if (key === 'arrowright') {
         action = 'end-increase';
+      } else if (physicalKey === 'z') {
+        action = 'seek-back-1s';
+      } else if (physicalKey === 'v') {
+        action = 'seek-forward-1s';
+      } else if (physicalKey === 'x') {
+        action = 'seek-back-02s';
+      } else if (physicalKey === 'c') {
+        action = 'seek-forward-02s';
       }
 
       if (action) {
@@ -191,34 +235,6 @@ export function useKeyboardEdit({
             onUpdate(selectedIndex, { endTime: currentTime });
           }
         }
-        return;
-      }
-
-      // Z/V: 재생 위치 1초 이동
-      if (physicalKey === 'z') {
-        e.preventDefault();
-        const newTime = Math.max(0, currentTime - 1);
-        onSeek(newTime);
-        return;
-      }
-      if (physicalKey === 'v') {
-        e.preventDefault();
-        const newTime = Math.min(videoDuration, currentTime + 1);
-        onSeek(newTime);
-        return;
-      }
-
-      // X/C: 재생 위치 0.2초 이동
-      if (physicalKey === 'x') {
-        e.preventDefault();
-        const newTime = Math.max(0, currentTime - 0.2);
-        onSeek(newTime);
-        return;
-      }
-      if (physicalKey === 'c') {
-        e.preventDefault();
-        const newTime = Math.min(videoDuration, currentTime + 0.2);
-        onSeek(newTime);
         return;
       }
 
@@ -280,6 +296,14 @@ export function useKeyboardEdit({
         action = 'end-decrease';
       } else if (key === 'arrowright') {
         action = 'end-increase';
+      } else if (physicalKey === 'z') {
+        action = 'seek-back-1s';
+      } else if (physicalKey === 'v') {
+        action = 'seek-forward-1s';
+      } else if (physicalKey === 'x') {
+        action = 'seek-back-02s';
+      } else if (physicalKey === 'c') {
+        action = 'seek-forward-02s';
       }
 
       if (activeKeyRef.current === action) {
