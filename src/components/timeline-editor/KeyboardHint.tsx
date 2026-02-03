@@ -40,8 +40,13 @@ export default function KeyboardHint({ selectedRally, selectedIndex }: KeyboardH
       <div className="flex gap-4 text-zinc-400">
         <span>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">Z</kbd>
+          <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs ml-0.5">V</kbd>
+          <span className="ml-1 text-zinc-500">재생위치 ±1s</span>
+        </span>
+        <span>
+          <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">X</kbd>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs ml-0.5">C</kbd>
-          <span className="ml-1 text-zinc-500">재생위치 ±1s (Shift: ±0.2s)</span>
+          <span className="ml-1 text-zinc-500">±0.2s</span>
         </span>
         <span>
           <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs">Q</kbd>
