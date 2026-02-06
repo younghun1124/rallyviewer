@@ -10,7 +10,8 @@ import TimeRuler from './TimeRuler';
 import TimelineTrack from './TimelineTrack';
 import KeyboardHint from './KeyboardHint';
 import TimelineControls from './TimelineControls';
-import { Plus, Save, Cloud, Copy, Check, Trash2 } from 'lucide-react';
+import { Plus, Save, Cloud, Copy, Check, Trash2, ClipboardPaste } from 'lucide-react';
+import { sortRallies, reindexRallies } from '@/lib/rally-utils';
 
 interface TimelineEditorProps {
   videoId: string;
@@ -40,6 +41,9 @@ export default function TimelineEditor({
   const [isAddingRally, setIsAddingRally] = useState(false);
   const [newRallyStart, setNewRallyStart] = useState<number | null>(null);
   const [csvCopied, setCsvCopied] = useState(false);
+  const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
+  const [jsonText, setJsonText] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   const {
     rallies,
@@ -83,6 +87,70 @@ export default function TimelineEditor({
     clearSaved();
     setShowRestorePrompt(false);
   };
+
+  // JSON 붙여넣기 핸들러
+  const handleJsonApply = useCallback(() => {
+    try {
+      let parsed = JSON.parse(jsonText);
+
+      // API 응답 형식이면 rallies 추출
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        if (parsed.rallies && Array.isArray(parsed.rallies)) {
+          parsed = parsed.rallies;
+        } else {
+          throw new Error('객체에 rallies 배열이 없습니다');
+        }
+      }
+
+      if (!Array.isArray(parsed)) {
+        throw new Error('배열 형식이어야 합니다');
+      }
+
+      if (parsed.length === 0) {
+        throw new Error('빈 배열입니다');
+      }
+
+      // 검증 및 정규화
+      const normalized = parsed.map((item: Record<string, unknown>, idx: number) => {
+        if (typeof item.startTime !== 'number' || typeof item.endTime !== 'number') {
+          throw new Error(`항목 ${idx + 1}: startTime과 endTime은 숫자여야 합니다`);
+        }
+        if (item.startTime < 0 || item.endTime < 0) {
+          throw new Error(`항목 ${idx + 1}: 시간은 0 이상이어야 합니다`);
+        }
+        if (item.startTime >= item.endTime) {
+          throw new Error(`항목 ${idx + 1}: startTime(${item.startTime})은 endTime(${item.endTime})보다 작아야 합니다`);
+        }
+
+        return {
+          rallyIndex: typeof item.rallyIndex === 'number' ? item.rallyIndex : idx + 1,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          duration: typeof item.duration === 'number' ? item.duration : (item.endTime - item.startTime),
+        };
+      });
+
+      // 정렬 후 재인덱싱
+      const sorted = sortRallies(normalized);
+      const reindexed = reindexRallies(sorted);
+
+      // 비디오 길이 초과 경고
+      const maxEndTime = Math.max(...reindexed.map(r => r.endTime));
+      if (maxEndTime > videoDuration) {
+        if (!confirm(`일부 랠리가 비디오 길이(${videoDuration.toFixed(1)}초)를 초과합니다.\n그래도 적용하시겠습니까?`)) {
+          return;
+        }
+      }
+
+      setRallies(reindexed);
+      setSelectedIndex(null);
+      setIsJsonModalOpen(false);
+      setJsonText('');
+      setJsonError(null);
+    } catch (error) {
+      setJsonError(error instanceof Error ? error.message : 'JSON 파싱 오류');
+    }
+  }, [jsonText, videoDuration, setRallies]);
 
   // CSV 복사
   const handleCopyCSV = useCallback(() => {
@@ -303,6 +371,20 @@ export default function TimelineEditor({
             <Trash2 className="w-4 h-4" />
             <span>전체 삭제</span>
           </button>
+
+          <div className="w-px h-6 bg-zinc-700" />
+
+          <button
+            onClick={() => {
+              setJsonText('');
+              setJsonError(null);
+              setIsJsonModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+          >
+            <ClipboardPaste className="w-4 h-4" />
+            <span>JSON 붙여넣기</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -388,6 +470,61 @@ export default function TimelineEditor({
         selectedRally={selectedRally}
         selectedIndex={selectedIndex}
       />
+
+      {/* JSON 붙여넣기 모달 */}
+      {isJsonModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-700 p-4 w-full max-w-lg mx-4 shadow-xl">
+            <h3 className="text-lg font-medium text-white mb-3">JSON 데이터 붙여넣기</h3>
+
+            <div className="mb-3">
+              <textarea
+                value={jsonText}
+                onChange={(e) => {
+                  setJsonText(e.target.value);
+                  setJsonError(null);
+                }}
+                placeholder={`[
+  {"startTime": 0.5, "endTime": 5.2},
+  {"startTime": 10.0, "endTime": 15.5}
+]`}
+                className="w-full h-48 bg-zinc-800 text-white text-sm font-mono rounded-lg p-3 border border-zinc-700 focus:outline-none focus:border-lime-500 resize-none"
+                autoFocus
+              />
+            </div>
+
+            {jsonError && (
+              <div className="mb-3 p-2 bg-red-500/10 border border-red-500/30 rounded text-sm text-red-400">
+                {jsonError}
+              </div>
+            )}
+
+            <div className="text-xs text-zinc-500 mb-4">
+              지원 형식: Rally 배열, startTime/endTime만 있는 간략 형식, {`{ rallies: [...] }`} API 응답 형식
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsJsonModalOpen(false);
+                  setJsonText('');
+                  setJsonError(null);
+                }}
+                className="px-4 py-2 text-sm bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleJsonApply}
+                disabled={!jsonText.trim()}
+                className="px-4 py-2 text-sm bg-lime-500 text-black font-medium rounded-lg hover:bg-lime-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                적용하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
