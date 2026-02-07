@@ -34,6 +34,9 @@ export default function RallyViewer() {
     // 편집한 적 있고 편집본 보기 선택 시 editedRallies 사용, 아니면 원본 사용
     const currentRallies = (hasEdited && showEditedVersion) ? editedRallies : (data?.rallies || []);
 
+    // videoUrl이 없어도 videoId로 URL 생성 (프로세싱 중에도 영상 표시 가능)
+    const effectiveVideoUrl = data?.videoUrl || (data?.videoId ? `https://pub-9829cbda552a470fb0321ae375a65709.r2.dev/original-videos/${data.videoId}.mp4` : null);
+
     const performFetch = useCallback(async (id: string) => {
         if (!id.trim()) return;
 
@@ -217,7 +220,7 @@ export default function RallyViewer() {
                             <div className="text-sm text-zinc-500 font-mono">
                                 ID: {data.videoId}
                             </div>
-                            {data.videoUrl && (
+                            {effectiveVideoUrl && (
                                 <button
                                     onClick={handleEditModeToggle}
                                     className={`
@@ -244,14 +247,14 @@ export default function RallyViewer() {
                         </div>
                     </div>
 
-                    {data.videoUrl && (
+                    {effectiveVideoUrl && (
                         <>
                             {/* 편집 모드: 세로 레이아웃 */}
                             {isEditMode ? (
                                 <div className="space-y-4">
                                     <VideoPlayer
                                         ref={videoPlayerRef}
-                                        url={data.videoUrl}
+                                        url={effectiveVideoUrl}
                                         seekTime={seekTime}
                                         autoPauseTime={null}
                                         onTimeUpdate={handleTimeUpdate}
@@ -279,7 +282,7 @@ export default function RallyViewer() {
                                     <div className="flex-1 min-w-0">
                                         <VideoPlayer
                                             ref={videoPlayerRef}
-                                            url={data.videoUrl}
+                                            url={effectiveVideoUrl}
                                             seekTime={seekTime}
                                             autoPauseTime={autoPauseTime}
                                             onTimeUpdate={handleTimeUpdate}
