@@ -217,7 +217,7 @@ export default function RallyViewer() {
                             <div className="text-sm text-zinc-500 font-mono">
                                 ID: {data.videoId}
                             </div>
-                            {data.status === 'completed' && (
+                            {data.videoUrl && (
                                 <button
                                     onClick={handleEditModeToggle}
                                     className={`
@@ -244,7 +244,7 @@ export default function RallyViewer() {
                         </div>
                     </div>
 
-                    {data.status === 'completed' && data.videoUrl && (
+                    {data.videoUrl && (
                         <>
                             {/* 편집 모드: 세로 레이아웃 */}
                             {isEditMode ? (
