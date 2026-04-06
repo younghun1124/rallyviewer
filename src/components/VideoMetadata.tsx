@@ -121,18 +121,17 @@ export default function VideoMetadata({ data, rallies, videoDuration, videoMeta,
     const [mp4Meta, setMp4Meta] = useState<Mp4Metadata | null>(null);
     const [mp4Loading, setMp4Loading] = useState(false);
 
-    // 패널이 열릴 때만 MP4 파싱 실행
+    // videoUrl이 있으면 바로 MP4 파싱
     useEffect(() => {
-        if (!isOpen || !videoUrl || mp4Meta || mp4Loading) return;
+        if (!videoUrl) {
+            setMp4Meta(null);
+            return;
+        }
+        setMp4Meta(null);
         setMp4Loading(true);
         parseMp4Metadata(videoUrl)
             .then(result => setMp4Meta(result))
             .finally(() => setMp4Loading(false));
-    }, [isOpen, videoUrl, mp4Meta, mp4Loading]);
-
-    // videoUrl 변경 시 리셋
-    useEffect(() => {
-        setMp4Meta(null);
     }, [videoUrl]);
 
     const totalRallyTime = rallies.reduce((sum, r) => sum + r.duration, 0);

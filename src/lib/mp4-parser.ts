@@ -544,6 +544,44 @@ export function getBrandName(brand: string): string {
   return BRAND_NAMES[brand] || brand;
 }
 
+/**
+ * 앞부분 헤더에서 top-level 박스 위치를 스캔합니다.
+ * mdat 같은 거대 박스는 크기만 읽고 건너뛰어 moov 위치를 파악합니다.
+ * 반환값은 각 박스의 파일 내 절대 오프셋과 크기입니다.
+ */
+function scanTopLevelBoxes(r: BufferReader, bufferSize: number, totalFileSize: number): { type: string; fileOffset: number; size: number }[] {
+  const boxes: { type: string; fileOffset: number; size: number }[] = [];
+  r.seek(0);
+
+  while (r.remaining >= 8) {
+    const pos = r.position;
+    let size = r.u32();
+    const type = r.str(4);
+    let headerSize = 8;
+
+    if (size === 1) {
+      if (r.remaining < 8) break;
+      size = Number(r.u64());
+      headerSize = 16;
+    } else if (size === 0) {
+      size = totalFileSize - pos;
+    }
+
+    boxes.push({ type, fileOffset: pos, size });
+
+    // 다음 박스로 이동 (버퍼 내에 있으면)
+    const nextPos = pos + size;
+    if (nextPos > bufferSize || nextPos <= r.position) {
+      // 이 박스는 버퍼를 넘어감 — 남은 박스들은 파일 뒤쪽에 있음
+      // 파일 크기를 알면 나머지 공간에 박스가 더 있을 수 있음을 기록
+      break;
+    }
+    r.seek(nextPos);
+  }
+
+  return boxes;
+}
+
 export async function parseMp4Metadata(url: string): Promise<Mp4Metadata | null> {
   try {
     // 1. HEAD 요청으로 HTTP 메타데이터 + 파일 크기 확인
@@ -557,28 +595,7 @@ export async function parseMp4Metadata(url: string): Promise<Mp4Metadata | null>
     const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
 
     const httpMeta = { contentType, lastModified, etag, server, acceptRanges };
-
-    // 2. 파일 앞부분 가져오기 (1.5MB)
-    const CHUNK_SIZE = 1536 * 1024;
     const rangeSupported = acceptRanges === 'bytes' || totalSize > 0;
-
-    let buffer: ArrayBuffer;
-    if (rangeSupported) {
-      const res = await fetch(url, {
-        headers: { 'Range': `bytes=0-${CHUNK_SIZE - 1}` }
-      });
-      buffer = await res.arrayBuffer();
-    } else {
-      // Range 미지원 시 전체를 다운받되 큰 파일은 포기
-      if (totalSize > 10 * 1024 * 1024) {
-        return { majorBrand: '', minorVersion: 0, compatibleBrands: [], tracks: [], ...httpMeta };
-      }
-      const res = await fetch(url);
-      buffer = await res.arrayBuffer();
-    }
-
-    const r = new BufferReader(buffer);
-    const topBoxes = findBoxes(r, buffer.byteLength);
 
     let result: Mp4Metadata = {
       majorBrand: '',
@@ -588,35 +605,108 @@ export async function parseMp4Metadata(url: string): Promise<Mp4Metadata | null>
       ...httpMeta,
     };
 
-    // ftyp
-    const ftyp = topBoxes.find(b => b.type === 'ftyp');
-    if (ftyp) {
-      const ft = parseFtyp(r, ftyp);
+    // 2. 앞부분 가져오기 (64KB면 ftyp + top-level 헤더 파악에 충분)
+    const HEAD_CHUNK = 64 * 1024;
+    let headBuffer: ArrayBuffer;
+    if (rangeSupported) {
+      const res = await fetch(url, {
+        headers: { 'Range': `bytes=0-${HEAD_CHUNK - 1}` }
+      });
+      headBuffer = await res.arrayBuffer();
+    } else {
+      if (totalSize > 10 * 1024 * 1024) return result;
+      const res = await fetch(url);
+      headBuffer = await res.arrayBuffer();
+    }
+
+    const headR = new BufferReader(headBuffer);
+
+    // 3. Top-level 박스 스캔 (ftyp, mdat, moov 등의 위치 파악)
+    const topBoxes = scanTopLevelBoxes(headR, headBuffer.byteLength, totalSize || headBuffer.byteLength);
+
+    // ftyp 파싱
+    const ftypInfo = topBoxes.find(b => b.type === 'ftyp');
+    if (ftypInfo && ftypInfo.fileOffset + ftypInfo.size <= headBuffer.byteLength) {
+      headR.seek(ftypInfo.fileOffset + 8); // skip size + type
+      const ft = parseFtyp(headR, {
+        type: 'ftyp',
+        start: ftypInfo.fileOffset,
+        size: ftypInfo.size,
+        dataStart: ftypInfo.fileOffset + 8,
+      });
       result.majorBrand = ft.majorBrand;
       result.minorVersion = ft.minorVersion;
       result.compatibleBrands = ft.compatibleBrands;
     }
 
-    // moov (앞에 있는 경우 = faststart)
-    let moov = topBoxes.find(b => b.type === 'moov');
+    // 4. moov 찾기 및 파싱
+    const moovInfo = topBoxes.find(b => b.type === 'moov');
 
-    // moov이 앞에 없으면 파일 끝에서 시도
-    if (!moov && rangeSupported && totalSize > CHUNK_SIZE) {
-      const tailStart = Math.max(0, totalSize - CHUNK_SIZE);
-      const tailRes = await fetch(url, {
-        headers: { 'Range': `bytes=${tailStart}-${totalSize - 1}` }
+    if (moovInfo && moovInfo.fileOffset + moovInfo.size <= headBuffer.byteLength) {
+      // moov이 앞부분 버퍼 안에 완전히 들어있음 (faststart)
+      const moovData = parseMoov(headR, {
+        type: 'moov',
+        start: moovInfo.fileOffset,
+        size: moovInfo.size,
+        dataStart: moovInfo.fileOffset + 8,
       });
-      const tailBuffer = await tailRes.arrayBuffer();
-      const tailR = new BufferReader(tailBuffer);
-      const tailBoxes = findBoxes(tailR, tailBuffer.byteLength);
-      moov = tailBoxes.find(b => b.type === 'moov');
-      if (moov) {
-        const moovData = parseMoov(tailR, moov);
-        Object.assign(result, moovData);
-      }
-    } else if (moov) {
-      const moovData = parseMoov(r, moov);
       Object.assign(result, moovData);
+    } else if (moovInfo && rangeSupported) {
+      // moov 위치는 알지만 버퍼에 다 안 들어옴 — 정확한 범위 요청
+      const moovEnd = moovInfo.fileOffset + moovInfo.size;
+      const res = await fetch(url, {
+        headers: { 'Range': `bytes=${moovInfo.fileOffset}-${moovEnd - 1}` }
+      });
+      const moovBuffer = await res.arrayBuffer();
+      const moovR = new BufferReader(moovBuffer);
+      const moovData = parseMoov(moovR, {
+        type: 'moov',
+        start: 0,
+        size: moovBuffer.byteLength,
+        dataStart: 8,
+      });
+      Object.assign(result, moovData);
+    } else if (!moovInfo && rangeSupported && totalSize > 0) {
+      // moov이 앞 64KB에 헤더조차 없음 — 파일 끝에 있을 수 있음
+      // 앞부분에서 알려진 박스들의 끝 위치로 moov 시작 추정
+      let knownEnd = 0;
+      for (const b of topBoxes) {
+        const bEnd = b.fileOffset + b.size;
+        if (bEnd > knownEnd) knownEnd = bEnd;
+      }
+
+      if (knownEnd < totalSize) {
+        // knownEnd 위치에 moov 헤더가 있을 수 있음 — 먼저 헤더만 읽기
+        const probeRes = await fetch(url, {
+          headers: { 'Range': `bytes=${knownEnd}-${knownEnd + 15}` }
+        });
+        const probeBuffer = await probeRes.arrayBuffer();
+        if (probeBuffer.byteLength >= 8) {
+          const probeR = new BufferReader(probeBuffer);
+          let moovSize = probeR.u32();
+          const moovType = probeR.str(4);
+          if (moovSize === 1 && probeBuffer.byteLength >= 16) {
+            moovSize = Number(probeR.u64());
+          }
+
+          if (moovType === 'moov' && moovSize > 0) {
+            const moovEnd = knownEnd + moovSize;
+            const res = await fetch(url, {
+              headers: { 'Range': `bytes=${knownEnd}-${moovEnd - 1}` }
+            });
+            const moovBuffer = await res.arrayBuffer();
+            const moovR = new BufferReader(moovBuffer);
+            const headerSize = moovSize > 0xFFFFFFFF ? 16 : 8;
+            const moovData = parseMoov(moovR, {
+              type: 'moov',
+              start: 0,
+              size: moovBuffer.byteLength,
+              dataStart: headerSize,
+            });
+            Object.assign(result, moovData);
+          }
+        }
+      }
     }
 
     return result;
