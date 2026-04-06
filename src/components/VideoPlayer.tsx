@@ -2,12 +2,18 @@
 
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
 
+export interface VideoMeta {
+    videoWidth: number;
+    videoHeight: number;
+}
+
 interface VideoPlayerProps {
     url: string;
     seekTime?: number | null;
     autoPauseTime?: number | null;
     onTimeUpdate?: (currentTime: number) => void;
     onDurationChange?: (duration: number) => void;
+    onVideoMeta?: (meta: VideoMeta) => void;
     onPauseRequest?: () => void;
     showSpeedControl?: boolean;
     preloadFull?: boolean; // 편집 모드에서 전체 버퍼링
@@ -29,7 +35,7 @@ export interface VideoPlayerRef {
 const SPEED_OPTIONS = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoPlayer(
-    { url, seekTime, autoPauseTime, onTimeUpdate, onDurationChange, onPauseRequest, showSpeedControl = false, preloadFull = false, isInRally = false, showRotateControl = false },
+    { url, seekTime, autoPauseTime, onTimeUpdate, onDurationChange, onVideoMeta, onPauseRequest, showSpeedControl = false, preloadFull = false, isInRally = false, showRotateControl = false },
     ref
 ) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -95,8 +101,16 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
     };
 
     const handleLoadedMetadata = () => {
-        if (videoRef.current && onDurationChange) {
-            onDurationChange(videoRef.current.duration);
+        if (videoRef.current) {
+            if (onDurationChange) {
+                onDurationChange(videoRef.current.duration);
+            }
+            if (onVideoMeta) {
+                onVideoMeta({
+                    videoWidth: videoRef.current.videoWidth,
+                    videoHeight: videoRef.current.videoHeight,
+                });
+            }
         }
     };
 

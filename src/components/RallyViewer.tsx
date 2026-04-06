@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { fetchAnalysis, AnalysisResponse, Rally } from '@/lib/api';
-import VideoPlayer, { VideoPlayerRef } from './VideoPlayer';
+import VideoPlayer, { VideoPlayerRef, VideoMeta } from './VideoPlayer';
 import RallyList from './RallyList';
 import TimelineEditor from './timeline-editor/TimelineEditor';
+import VideoMetadata from './VideoMetadata';
 import { Search, Loader2, AlertCircle, CheckCircle2, Clock, Pencil, Eye } from 'lucide-react';
 
 export default function RallyViewer() {
@@ -27,6 +28,8 @@ export default function RallyViewer() {
     const [showEditedVersion, setShowEditedVersion] = useState(true); // 보기 모드에서 편집본 표시 여부
     const [currentVideoTime, setCurrentVideoTime] = useState(0);
     const [videoDuration, setVideoDuration] = useState(0);
+    const [videoMeta, setVideoMeta] = useState<VideoMeta | null>(null);
+    const [fileSize, setFileSize] = useState<number | null>(null);
 
     const pollInterval = useRef<NodeJS.Timeout | null>(null);
     const videoPlayerRef = useRef<VideoPlayerRef>(null);
@@ -36,6 +39,21 @@ export default function RallyViewer() {
 
     // videoUrl이 없어도 videoId로 URL 생성 (프로세싱 중에도 영상 표시 가능)
     const effectiveVideoUrl = data?.videoUrl || (data?.videoId ? `https://pub-9829cbda552a470fb0321ae375a65709.r2.dev/original-videos/${data.videoId}.mp4` : null);
+
+    // 영상 용량 가져오기
+    useEffect(() => {
+        if (!effectiveVideoUrl) {
+            setFileSize(null);
+            return;
+        }
+        setFileSize(null);
+        fetch(effectiveVideoUrl, { method: 'HEAD' })
+            .then(res => {
+                const cl = res.headers.get('content-length');
+                if (cl) setFileSize(parseInt(cl, 10));
+            })
+            .catch(() => {});
+    }, [effectiveVideoUrl]);
 
     const performFetch = useCallback(async (id: string) => {
         if (!id.trim()) return;
@@ -49,6 +67,8 @@ export default function RallyViewer() {
         setEditedRallies([]);
         setHasEdited(false);
         setVideoDuration(0);
+        setVideoMeta(null);
+        setFileSize(null);
 
         try {
             const result = await fetchAnalysis(id);
@@ -247,6 +267,14 @@ export default function RallyViewer() {
                         </div>
                     </div>
 
+                    <VideoMetadata
+                        data={data}
+                        rallies={currentRallies}
+                        videoDuration={videoDuration}
+                        videoMeta={videoMeta}
+                        fileSize={fileSize}
+                    />
+
                     {effectiveVideoUrl && (
                         <>
                             {/* 편집 모드: 세로 레이아웃 */}
@@ -259,6 +287,7 @@ export default function RallyViewer() {
                                         autoPauseTime={null}
                                         onTimeUpdate={handleTimeUpdate}
                                         onDurationChange={handleDurationChange}
+                                        onVideoMeta={setVideoMeta}
                                         onPauseRequest={() => setAutoPauseTime(null)}
                                         showSpeedControl={true}
                                         preloadFull={true}
@@ -287,6 +316,7 @@ export default function RallyViewer() {
                                             autoPauseTime={autoPauseTime}
                                             onTimeUpdate={handleTimeUpdate}
                                             onDurationChange={handleDurationChange}
+                                            onVideoMeta={setVideoMeta}
                                             onPauseRequest={() => setAutoPauseTime(null)}
                                             showSpeedControl={false}
                                         />
