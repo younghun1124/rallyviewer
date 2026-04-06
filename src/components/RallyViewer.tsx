@@ -273,6 +273,7 @@ export default function RallyViewer() {
                         videoDuration={videoDuration}
                         videoMeta={videoMeta}
                         fileSize={fileSize}
+                        videoUrl={effectiveVideoUrl}
                     />
 
                     {effectiveVideoUrl && (
