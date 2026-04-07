@@ -280,7 +280,7 @@ function parseStsd(r: BufferReader, box: Box, handlerType: string, timescale: nu
     r.skip(4); // reserved
     r.skip(2); // frame_count
     r.skip(32); // compressorname
-    info.bitDepth = r.u16();
+    r.skip(2); // depth (항상 0x0018, 실제 비트심도 아님)
     r.skip(2); // pre_defined
 
     // Parse sub-boxes for codec config
@@ -297,6 +297,10 @@ function parseStsd(r: BufferReader, box: Box, handlerType: string, timescale: nu
           info.profile = H264_PROFILES[profileIdc] || `Profile ${profileIdc}`;
           info.level = `${(levelIdc / 10).toFixed(1)}`;
           info.codecLong = `H.264 ${info.profile}@L${info.level}`;
+          // 프로필로 비트 심도 판단
+          if (profileIdc === 110) info.bitDepth = 10; // High 10
+          else if (profileIdc === 122 || profileIdc === 244) info.bitDepth = 10; // High 4:2:2, High 4:4:4
+          else info.bitDepth = 8;
         } else if (sub.type === 'hvcC' && sub.size >= 12) {
           r.seek(sub.dataStart);
           r.skip(1); // configurationVersion
@@ -308,6 +312,10 @@ function parseStsd(r: BufferReader, box: Box, handlerType: string, timescale: nu
           info.profile = H265_PROFILES[profileIdc] || `Profile ${profileIdc}`;
           info.level = `${(levelIdc / 30).toFixed(1)}`;
           info.codecLong = `H.265 ${info.profile}@L${info.level}`;
+          // 프로필로 비트 심도 판단
+          if (profileIdc === 2) info.bitDepth = 10; // Main 10
+          else if (profileIdc === 1) info.bitDepth = 8; // Main
+          else if (profileIdc === 4) info.bitDepth = 10; // Range Extensions (보통 10bit)
         } else if (sub.type === 'colr' && sub.size >= 18) {
           // Color info
           r.seek(sub.dataStart);
