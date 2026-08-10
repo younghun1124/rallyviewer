@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
+import Hls from 'hls.js';
 
 export interface VideoMeta {
     videoWidth: number;
@@ -77,6 +78,35 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
     }));
 
     useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        const isHls = (() => {
+            try {
+                return new URL(url).pathname.toLowerCase().endsWith('.m3u8');
+            } catch {
+                return url.toLowerCase().includes('.m3u8');
+            }
+        })();
+
+        let hls: Hls | null = null;
+        if (isHls && Hls.isSupported()) {
+            hls = new Hls();
+            hls.loadSource(url);
+            hls.attachMedia(video);
+        } else {
+            // Safari/iOS의 native HLS와 일반 MP4는 브라우저에 직접 맡긴다.
+            video.src = url;
+        }
+
+        return () => {
+            hls?.destroy();
+            video.removeAttribute('src');
+            video.load();
+        };
+    }, [url]);
+
+    useEffect(() => {
         if (seekTime !== null && seekTime !== undefined && videoRef.current) {
             videoRef.current.currentTime = seekTime;
             videoRef.current.play().catch(() => {
@@ -141,7 +171,6 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
         <div className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg ring-4 transition-[box-shadow] duration-150 ${isInRally ? 'ring-lime-500' : 'ring-transparent'}`}>
             <video
                 ref={videoRef}
-                src={url}
                 className="w-full h-full object-contain transition-transform duration-200"
                 style={{ transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined }}
                 controls
