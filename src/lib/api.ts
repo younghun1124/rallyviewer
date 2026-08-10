@@ -9,6 +9,7 @@ export interface AnalysisResponse {
   videoId: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
+  streamingUrl?: string;
   rallies?: Rally[];
   error?: string;
   createdAt?: string;

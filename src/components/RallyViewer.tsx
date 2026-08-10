@@ -37,23 +37,25 @@ export default function RallyViewer() {
     // 편집한 적 있고 편집본 보기 선택 시 editedRallies 사용, 아니면 원본 사용
     const currentRallies = (hasEdited && showEditedVersion) ? editedRallies : (data?.rallies || []);
 
-    // videoUrl이 없어도 videoId로 URL 생성 (프로세싱 중에도 영상 표시 가능)
-    const effectiveVideoUrl = data?.videoUrl || (data?.videoId ? `https://pub-9829cbda552a470fb0321ae375a65709.r2.dev/original-videos/${data.videoId}.mp4` : null);
+    // 앱과 동일하게 준비된 스트리밍 URL을 우선한다. 기존 원본 URL과
+    // R2 표준 경로는 스트리밍 준비 전/레거시 데이터의 fallback으로 남겨둔다.
+    const effectiveVideoUrl = data?.streamingUrl || data?.videoUrl || (data?.videoId ? `https://pub-9829cbda552a470fb0321ae375a65709.r2.dev/original-videos/${data.videoId}.mp4` : null);
+    const metadataVideoUrl = data?.videoUrl || (effectiveVideoUrl?.toLowerCase().includes('.m3u8') ? null : effectiveVideoUrl);
 
     // 영상 용량 가져오기
     useEffect(() => {
-        if (!effectiveVideoUrl) {
+        if (!metadataVideoUrl) {
             setFileSize(null);
             return;
         }
         setFileSize(null);
-        fetch(effectiveVideoUrl, { method: 'HEAD' })
+        fetch(metadataVideoUrl, { method: 'HEAD' })
             .then(res => {
                 const cl = res.headers.get('content-length');
                 if (cl) setFileSize(parseInt(cl, 10));
             })
             .catch(() => {});
-    }, [effectiveVideoUrl]);
+    }, [metadataVideoUrl]);
 
     const performFetch = useCallback(async (id: string) => {
         if (!id.trim()) return;
@@ -90,7 +92,7 @@ export default function RallyViewer() {
             setVideoId(idFromUrl);
             performFetch(idFromUrl);
         }
-    }, [searchParams, performFetch]);
+    }, [searchParams, performFetch, data?.videoId]);
 
     const handleManualFetch = () => {
         if (!videoId.trim()) return;
@@ -273,7 +275,7 @@ export default function RallyViewer() {
                         videoDuration={videoDuration}
                         videoMeta={videoMeta}
                         fileSize={fileSize}
-                        videoUrl={effectiveVideoUrl}
+                        videoUrl={metadataVideoUrl}
                     />
 
                     {effectiveVideoUrl && (
